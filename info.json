@@ -1,0 +1,12 @@
+{
+  "commit": {
+    "commit": "517358075c2c89f4dd54a87b52aa7e704ada5f4d",
+    "author": "Scott Chamberlain <sckott@fastmail.com>",
+    "time": "2021-05-31 17:17:13",
+    "files": 1,
+    "merge": false,
+    "message": "update cran comments\n"
+  },
+  "remote": "https://github.com/ropensci/vcr",
+  "pkg": "vcr"
+}
