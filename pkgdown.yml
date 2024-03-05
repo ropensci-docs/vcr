@@ -1,0 +1,19 @@
+pandoc: 2.16.2
+pkgdown: 2.0.7
+pkgdown_sha: ~
+articles:
+  cassette-manual-editing: cassette-manual-editing.html
+  configuration: configuration.html
+  debugging: debugging.html
+  design: design.html
+  internals: internals.html
+  lightswitch: lightswitch.html
+  record-modes: record-modes.html
+  request_matching: request_matching.html
+  vcr: vcr.html
+  write-to-disk: write-to-disk.html
+last_built: 2024-03-05T06:55Z
+urls:
+  reference: https://docs.ropensci.org/vcr/reference
+  article: https://docs.ropensci.org/vcr/articles
+

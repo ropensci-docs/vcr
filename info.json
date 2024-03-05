@@ -1,0 +1,12 @@
+{
+  "commit": {
+    "commit": "ef700e5ce908e69b5f8352b98eaf12e4c8ce0748",
+    "author": "Scott Chamberlain <sckott@fastmail.com>",
+    "time": "2024-02-04 06:26:20",
+    "files": 4,
+    "merge": false,
+    "message": "add pkg level doc witih _PACKAGE fix #263\n"
+  },
+  "repo": "https://github.com/ropensci/vcr",
+  "pkg": "vcr"
+}
