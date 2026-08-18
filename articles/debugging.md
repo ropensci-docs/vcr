@@ -1,0 +1,286 @@
+# Debugging vcr failures
+
+This vignette helps you debug the vcr error that you’re most likely to
+encounter: “Failed to find matching request in active cassette.”. If
+you’re lucky, the request has genuinely changed, and you can make this
+problem go away by deleting the previous cassette so vcr can re-record
+it 🙂. Otherwise, you’ll need to do some debugging. First we’ll talk
+about logging, and how you can use it to better understand the process
+by which vcr matches the requests you make to the request-response pairs
+saved in a cassette. Then we’ll work through a few of the most common
+problems and discuss specific solutions.
+
+In this vignette, we’ll use httr2 for generating the requests. The same
+principles apply if you’re working with crul or httr, just the code for
+making requests will look different. We’ll also start up a local httpbin
+server using {webfakes}: this will let us make some practice requests to
+a local server.
+
+``` r
+
+library(vcr)
+library(httr2)
+httpbin <- webfakes::local_app_process(webfakes::httpbin_app())
+```
+
+## Logging basics
+
+The best tool to understand why your request isn’t matching is logging.
+You can turn logging on for a single test with
+[`local_vcr_configure_log()`](https://docs.ropensci.org/vcr/reference/vcr_configure_log.md).
+Let’s turn on logging and see what happens the first time you make a
+request:
+
+``` r
+
+test_that("example test", {
+  local_vcr_configure_log()
+  local_cassette("debugging-1")
+
+  req <- request(httpbin$url("/get"))
+  resp <- req_perform(req)
+})
+#> [Cassette: debugging-1] Inserting 'debugging-1.yml' (new cassette)
+#> [Cassette: debugging-1]   Mode: recording
+#> [Cassette: debugging-1] Handling request: GET http://127.0.0.1:39089/get
+#> [Cassette: debugging-1]   Recording response: 200 with 279 bytes of application/json data
+#> [Cassette: debugging-1] Ejecting
+```
+
+1.  A new cassette is inserted, and is placed in recording mode.
+2.  The request is handled, and because we’re in recording mode, it’s
+    recorded to disk.
+3.  The cassette is ejected.
+
+### Second and subsequent requests
+
+If we run that code another time, the flow is slightly different:
+
+``` r
+
+test_that("example test", {
+  local_vcr_configure_log()
+  local_cassette("debugging-1")
+
+  req <- request(httpbin$url("/get"))
+  resp <- req_perform(req)
+})
+#> [Cassette: debugging-1] Inserting 'debugging-1.yml' (with 1 interactions)
+#> [Cassette: debugging-1]   Mode: replaying
+#> [Cassette: debugging-1] Handling request: GET http://127.0.0.1:39089/get
+#> [Cassette: debugging-1]   Looking for existing requests using method/uri
+#> [Cassette: debugging-1]     Request 1: MATCH
+#> [Cassette: debugging-1]   Replaying response 1
+#> [Cassette: debugging-1] Ejecting
+```
+
+1.  The previously created cassette is inserted, loading one interaction
+    from disk. This time it’s in replaying mode.
+2.  The request is handled, but this time we’re in replay mode, so vcr
+    looks for it in the cassette. vcr finds it so it can replay the
+    recorded response.
+3.  The cassette is ejected.
+
+### A match failure
+
+We can now deliberately make a different request to see what happens.
+We’ll leave everything the same but change the method to `POST`:
+
+``` r
+
+test_that("example test", {
+  local_vcr_configure_log()
+  local_cassette("debugging-1")
+
+  req <- request(httpbin$url("/get")) |> req_method("POST")
+  resp <- req_perform(req)
+})
+#> [Cassette: debugging-1] Inserting 'debugging-1.yml' (with 1 interactions)
+#> [Cassette: debugging-1]   Mode: replaying
+#> [Cassette: debugging-1] Handling request: POST http://127.0.0.1:39089/get
+#> [Cassette: debugging-1]   Looking for existing requests using method/uri
+#> [Cassette: debugging-1]     Request 1: NO MATCH
+#> [Cassette: debugging-1]       `matching$method`: "POST"
+#> [Cassette: debugging-1]       `recorded$method`: "GET" 
+#> [Cassette: debugging-1]   No matching requests
+#> Error:
+#> ! Failed to find matching request in active cassette, "debugging-1".
+#> ℹ Learn more in `vignette(vcr::debugging)`.
+```
+
+This time you can see vcr didn’t find any matches because there was only
+one request, and that request (`matching`) had a different method to the
+request we were trying to match.
+
+What happens if we change the URL?
+
+``` r
+
+test_that("example test", {
+  local_vcr_configure_log()
+  local_cassette("debugging-1")
+
+  req <- request(httpbin$url("/set"))
+  resp <- req_perform(req)
+})
+#> [Cassette: debugging-1] Inserting 'debugging-1.yml' (with 1 interactions)
+#> [Cassette: debugging-1]   Mode: replaying
+#> [Cassette: debugging-1] Handling request: GET http://127.0.0.1:39089/set
+#> [Cassette: debugging-1]   Looking for existing requests using method/uri
+#> [Cassette: debugging-1]     Request 1: NO MATCH
+#> [Cassette: debugging-1]       `matching$uri$path`: "/set"
+#> [Cassette: debugging-1]       `recorded$uri$path`: "/get"
+#> [Cassette: debugging-1]   No matching requests
+#> Error:
+#> ! Failed to find matching request in active cassette, "debugging-1".
+#> ℹ Learn more in `vignette(vcr::debugging)`.
+```
+
+Again, you can see why the request didn’t match. vcr compares the parsed
+urls using {waldo}, hopefully making it easy to see exactly what’s
+different.
+
+### Multiple requests
+
+Before we move on to specific scenarios, let’s look at a case where we
+record multiple requests:
+
+``` r
+
+test_that("example test", {
+  local_vcr_configure_log()
+  local_cassette("debugging-2")
+
+  resp1 <- req_perform(request(httpbin$url("/get?x=1")))
+  resp2 <- req_perform(request(httpbin$url("/get?x=2")))
+  resp3 <- req_perform(request(httpbin$url("/get?x=3")))
+})
+#> [Cassette: debugging-2] Inserting 'debugging-2.yml' (new cassette)
+#> [Cassette: debugging-2]   Mode: recording
+#> [Cassette: debugging-2] Handling request: GET http://127.0.0.1:39089/get?x=1
+#> [Cassette: debugging-2]   Recording response: 200 with 295 bytes of application/json data
+#> [Cassette: debugging-2] Handling request: GET http://127.0.0.1:39089/get?x=2
+#> [Cassette: debugging-2]   Recording response: 200 with 295 bytes of application/json data
+#> [Cassette: debugging-2] Handling request: GET http://127.0.0.1:39089/get?x=3
+#> [Cassette: debugging-2]   Recording response: 200 with 295 bytes of application/json data
+#> [Cassette: debugging-2] Ejecting
+```
+
+Now if we deliberately change the url, you can see that it looks at all
+three previously saved requests before giving up.
+
+``` r
+
+test_that("example test", {
+  local_vcr_configure_log()
+  local_cassette("debugging-2")
+
+  resp4 <- req_perform(request(httpbin$url("/get?x=4")))
+})
+#> [Cassette: debugging-2] Inserting 'debugging-2.yml' (with 3 interactions)
+#> [Cassette: debugging-2]   Mode: replaying
+#> [Cassette: debugging-2] Handling request: GET http://127.0.0.1:39089/get?x=4
+#> [Cassette: debugging-2]   Looking for existing requests using method/uri
+#> [Cassette: debugging-2]     Request 1: NO MATCH
+#> [Cassette: debugging-2]       `matching$uri$params$x`: "4"
+#> [Cassette: debugging-2]       `recorded$uri$params$x`: "1"
+#> [Cassette: debugging-2]     Request 2: NO MATCH
+#> [Cassette: debugging-2]       `matching$uri$params$x`: "4"
+#> [Cassette: debugging-2]       `recorded$uri$params$x`: "2"
+#> [Cassette: debugging-2]     Request 3: NO MATCH
+#> [Cassette: debugging-2]       `matching$uri$params$x`: "4"
+#> [Cassette: debugging-2]       `recorded$uri$params$x`: "3"
+#> [Cassette: debugging-2]   No matching requests
+#> Error:
+#> ! Failed to find matching request in active cassette, "debugging-2".
+#> ℹ Learn more in `vignette(vcr::debugging)`.
+```
+
+You’ll notice that this is substantially more complicated to understand,
+and you can imagine it only gets harder the more requests you have.
+That’s a good reason to keep your tests small and simple, and limited to
+only a couple of requests.
+
+## Common problems and their solutions
+
+Now that you understand how to use logging to see exactly what vcr is
+doing, we can talk about some solutions to common problems.
+
+### Re-used cassette name
+
+You need to make sure that every test has its own unique cassette name,
+otherwise you won’t find the responses that you’re expecting. This is
+generally a fairly easy problem to diagnose if you’re aware of it: if
+you re-record the cassette to fix the one test, a different test will
+break. (Technically, it is ok to share the same cassette name if you
+want to use the same request for different tests. That’s one of the
+reasons that vcr can’t automatically spot this problem for you.)
+
+### Non-deterministic requests
+
+Sometimes it’s not possible to make the same request again and again.
+For example, in some cases an API will require a “nonce”, a random
+string used to ensure that every request is unique:
+
+``` r
+
+# Imagine this function is in R/
+make_request <- function() {
+  nonce <- paste0(sample(letters, 10, replace = TRUE), collapse = "")
+
+  req <- request(httpbin$url("/get")) 
+  req <- req_url_query(req, nonce = nonce)
+  req_perform(req)
+}
+
+# And this code is in tests/testthat/
+test_that("example test", { 
+  local_cassette("nondeterministic")
+  
+  resp <- make_request()
+})
+
+test_that("example test", { 
+  local_vcr_configure_log()
+  local_cassette("nondeterministic")
+  
+  resp <- make_request()
+})
+#> [Cassette: nondeterministic] Inserting 'nondeterministic.yml' (with 1 interactions)
+#> [Cassette: nondeterministic]   Mode: replaying
+#> [Cassette: nondeterministic] Handling request: GET http://127.0.0.1:39089/get?nonce=eexombwkke
+#> [Cassette: nondeterministic]   Looking for existing requests using method/uri
+#> [Cassette: nondeterministic]     Request 1: NO MATCH
+#> [Cassette: nondeterministic]       `matching$uri$params$nonce`: "eexombwkke"
+#> [Cassette: nondeterministic]       `recorded$uri$params$nonce`: "mwlefoodfi"
+#> [Cassette: nondeterministic]   No matching requests
+#> Error:
+#> ! Failed to find matching request in active cassette,
+#>   "nondeterministic".
+#> ℹ Learn more in `vignette(vcr::debugging)`.
+```
+
+You can solve this problem by trimming that component from the query
+string using the `filter_query_parameters` option. This will remove the
+specific query parameter names from the uri being matched.
+
+``` r
+
+test_that("example test", { 
+  local_vcr_configure_log()
+  local_vcr_configure(filter_query_parameters = "nonce")
+  local_cassette("nondeterministic")
+  
+  resp <- make_request()
+})
+#> [Cassette: nondeterministic] Inserting 'nondeterministic.yml' (with 1 interactions)
+#> [Cassette: nondeterministic]   Mode: replaying
+#> [Cassette: nondeterministic] Handling request: GET http://127.0.0.1:39089/get?nonce=ulbfdpbcyv
+#> [Cassette: nondeterministic]   Looking for existing requests using method/uri
+#> [Cassette: nondeterministic]     Request 1: MATCH
+#> [Cassette: nondeterministic]   Replaying response 1
+#> [Cassette: nondeterministic] Ejecting
+```
+
+In the less common case where you’re matching on headers, you can use
+the `filter_request_headers` configuration to achieve the same effect.

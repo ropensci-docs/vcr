@@ -1,0 +1,13 @@
+{
+  "commit": {
+    "commit": "b7c440ee4e1c8d7e78cce3f274c3da788f99d7b3",
+    "author": "Scott Chamberlain <sckott@fastmail.com>",
+    "time": "2026-08-18T18:03:41Z",
+    "files": 0,
+    "merge": false,
+    "message": "REVDEPCHECK - start revdep check\n"
+  },
+  "repo": "https://github.com/ropensci/vcr",
+  "pkg": "vcr",
+  "time": "2026-08-18T19:16:50Z"
+}
