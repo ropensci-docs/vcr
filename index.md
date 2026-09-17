@@ -1,0 +1,108 @@
+# vcr
+
+[![cran
+checks](https://badges.cranchecks.info/worst/vcr.svg)](https://CRAN.R-project.org/package=vcr)
+[![Project Status: Active – The project has reached a stable, usable
+state and is being actively
+developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
+[![R-check](https://github.com/ropensci/vcr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/ropensci/vcr/actions/workflows/R-CMD-check.yaml)
+[![codecov](https://codecov.io/gh/ropensci/vcr/branch/main/graph/badge.svg)](https://app.codecov.io/gh/ropensci/vcr)
+[![rstudio mirror
+downloads](https://cranlogs.r-pkg.org/badges/vcr)](https://github.com/r-hub/cranlogs.app)
+[![cran
+version](https://www.r-pkg.org/badges/version/vcr)](https://cran.r-project.org/package=vcr)
+
+{vcr} records and replays HTTP requests so you can test your API package
+with speed and confidence. It makes your tests independent of your
+internet connection (so they work on CRAN!) and because your tests get
+much much faster, you can write even more, increasing the coverage of
+your package. {vcr} works with {crul}, {httr} and {httr2}.
+
+{vcr} draws inspiration from Ruby’s [vcr](https://github.com/vcr/vcr).
+
+## Installation
+
+``` r
+
+# Install the latest released version from CRAN
+install.packages("vcr")
+
+# Or install the development version
+# from R-universe
+install.packages(
+  "vcr",
+  repos = c("https://ropensci.r-universe.dev", "https://cloud.r-project.org")
+)
+
+# Or from GitHub:
+# install.packages("pak")
+pak::pak("ropensci/vcr")
+```
+
+## Usage
+
+Using vcr in a test is straightforward: just call
+[`vcr::local_cassette()`](https://docs.ropensci.org/vcr/reference/use_cassette.md).
+The first time your test is run, vcr will automatically record every
+HTTP request, saving the request and reponse in `tests/testthat/_vcr`.
+After that, it will replay those recorded requests, meaning that your
+test no longer needs an active connection.
+
+``` r
+
+test_that("can retrieve current version", {
+  vcr::local_cassette("rl_version")
+  expect_equal(rredlist::rl_version(), "2025-1")
+})
+```
+
+The first argument to
+[`local_cassette()`](https://docs.ropensci.org/vcr/reference/use_cassette.md)
+is the cassette name: it’s used to name the cassette file so needs to be
+unique across tests. In this case, running the above test will generate
+`tests/testthat/_vcr/rl_version.yaml` which looks something like this:
+
+``` yaml
+http_interactions:
+- request:
+    method: GET
+    uri: https://api.iucnredlist.org/api/v4/information/red_list_version
+  response:
+    status: 200
+    headers:
+      status: 'HTTP/2 200 '
+      cache-control: max-age=0, private, must-revalidate
+      content-type: application/json
+      etag: W/"1694e95e54c5590a355e5922b47c7cd9"
+      date: Tue, 06 May 2025 20:52:22 GMT
+    body:
+      string: '{"red_list_version":"2025-1"}'
+  recorded_at: 2025-05-06 20:52:21
+recorded_with: VCR-vcr/2.0.0
+```
+
+If you look carefully at this file, you’ll notice an `Authorization`
+header is not recorded in the request headers despite it being used in
+the actual HTTP request. Read more about protecting secrets in the
+vignette
+[`vignette("secrets")`](https://docs.ropensci.org/vcr/articles/secrets.md).
+
+## Learn more
+
+Start with
+[`vignette("vcr")`](https://docs.ropensci.org/vcr/articles/vcr.md) to
+learn more about how {vcr} works, especially how requests are matched to
+the recordeded cassette. You might also enjoy the [HTTP
+testing](https://books.ropensci.org/http-testing/) book for a lot more
+details about {vcr}, {webmockr}, {curl} and more.
+
+## Meta
+
+- Please [report any issues or
+  bugs](https://github.com/ropensci/vcr/issues)
+- License: MIT
+- Get citation information for `vcr` in R doing
+  `citation(package = 'vcr')`
+- Please note that this package is released with a [Contributor Code of
+  Conduct](https://ropensci.org/code-of-conduct/). By contributing to
+  this project, you agree to abide by its terms.
