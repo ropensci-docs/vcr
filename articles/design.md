@@ -1,0 +1,149 @@
+# Design of vcr
+
+This section explains `vcr`’s internal design and architecture.
+
+### How vcr works
+
+The steps:
+
+1.  Use either
+    [`vcr::use_cassette()`](https://docs.ropensci.org/vcr/reference/use_cassette.md)
+    or
+    [`vcr::local_cassette()`](https://docs.ropensci.org/vcr/reference/use_cassette.md)
+
+&nbsp;
+
+1.  If you use
+    [`vcr::local_cassette()`](https://docs.ropensci.org/vcr/reference/use_cassette.md),
+    make sure to run
+    [`vcr::eject_cassette()`](https://docs.ropensci.org/vcr/reference/insert_cassette.md)
+    when you’re done to stop recording
+
+&nbsp;
+
+2.  When you first run a request with `vcr` there’s no cached data to
+    use, so we allow HTTP requests until your request is done.
+3.  The real HTTP request is made and we record a response in memory
+    (not written to disk).
+4.  We then disallow HTTP requests so that if the request is done again
+    we use the cached response.
+5.  The last thing we do is write the HTTP interaction to disk in a
+    mostly human readable form.
+
+When you run that request again using
+[`vcr::use_cassette()`](https://docs.ropensci.org/vcr/reference/use_cassette.md)
+or
+[`vcr::local_cassette()`](https://docs.ropensci.org/vcr/reference/use_cassette.md):
+
+- We attempt to match the request to cached requests, and since we
+  stubbed the request the first time we used the cached response.
+
+Of course if you do a different request, even slightly (but depending on
+which matching format you decided to use), then the request will have no
+matching stub and no cached response, and then a real HTTP request is
+done - we then cache it, then subsequent requests will pull from that
+cached response.
+
+You can use any of the three HTTP R clients: `crul`, `httr` and `httr2`.
+
+The main use case we are going for in `vcr` is to deal with real HTTP
+requests and responses, so we allow real HTTP requests when we need to,
+and turn it off when we don’t.
+
+### Where vcr comes from
+
+`vcr` was “ported” from the Ruby gem (aka, library) of the same
+name[^1]. Because it was ported from Ruby, an object-oriented
+programming language I thought it would be easier to use an object
+system in R that most closely resemble that used in Ruby (at least in my
+opinion). This thinking lead to choosing
+[R6](https://adv-r.hadley.nz/r6.html). Since v2 we’ve mostly removed use
+of R6 throughout the package.
+
+### Principles
+
+#### An easy to use interface hides complexity
+
+As described above, `vcr` uses some R6 internally, but users interact
+with normal R functions.
+
+#### Hooks into HTTP clients
+
+Perhaps the most fundamental thing about that this package work is how
+it knows what HTTP requests are being made. This stumped me for quite a
+long time. When looking at Ruby vcr, at first I thought it must be
+“listening” for HTTP requests somehow. Then I found out about [monkey
+patching](https://en.wikipedia.org/wiki/Monkey_patch); that’s how it’s
+achieved in Ruby. That is, the Ruby vcr package literally overrides
+certain methods in Ruby HTTP clients, hijacking internals of the HTTP
+clients.
+
+However, monkey patching is not allowed in R. Thus, in R we have to
+somehow have “hooks” into HTTP clients in R. Fortunately, Scott is the
+maintainer of one of the HTTP clients, `crul`, so was able to quickly
+create a hook. Fortunately, there was already a hook mechanism in the
+`httr` and `httr2` packages.
+
+### Internal classes
+
+An overview of some of the more important aspects of vcr.
+
+#### Configuration
+
+An internal object (`the`) is created when `vcr` is loaded with the
+default vcr configuration options in a list. This class keeps track of
+default and user specified configuration options. You can access `the`
+using triple namespace `:::`, though it is not intended for general use.
+Whenever you make calls to
+[`vcr_configure()`](https://docs.ropensci.org/vcr/reference/vcr_configure.md)
+or other configuration functions, `the` is affected.
+
+#### Cassette class
+
+`Cassette` is an R6 class that handles internals/state for each
+cassette. Each time you run
+[`use_cassette()`](https://docs.ropensci.org/vcr/reference/use_cassette.md)/[`local_cassette()`](https://docs.ropensci.org/vcr/reference/use_cassette.md)
+this class is used. The class has quite a few methods in it, so there’s
+a lot going on in the class. Ideally the class would be separated into
+subclasses to handle similar sets of logic, but there’s not an easy way
+to do that with R6.
+
+#### How HTTP requests are handled
+
+`RequestHandler` and it’s child classes `RequestHandlerCrul`,
+`RequestHandlerHttr` and `RequestHandlerHttr2`, handle the logic for for
+`crul`, `httr` and `httr2`, respectively. These classes determine what
+to do with each HTTP request. The options for each HTTP request include:
+
+- **Ignored** You can ignore HTTP requests under certain rules using the
+  configuration options `ignore_hosts` and `ignore_localhost`
+- **Stubbed by vcr** This is an HTTP request for which a match is found
+  in the cassette defined in the
+  [`use_cassette()`](https://docs.ropensci.org/vcr/reference/use_cassette.md)/[`insert_cassette()`](https://docs.ropensci.org/vcr/reference/insert_cassette.md)
+  call. In this case the matching request/response from the cassette is
+  returned with no real HTTP request allowed.
+- **Recordable** This is an HTTP request for which no match is found in
+  the cassette defined in the
+  [`use_cassette()`](https://docs.ropensci.org/vcr/reference/use_cassette.md)/[`insert_cassette()`](https://docs.ropensci.org/vcr/reference/insert_cassette.md)
+  call. In this case a real HTTP request is allowed, and the
+  request/response is recorded to the cassette.
+- **Unhandled** If none of the above are triggered, you’ll get a
+  hopefully helpful error message.
+
+#### Serializers
+
+Serializers handle in what format cassettes are written to files on
+disk. The current options are YAML (default), JSON, and QS2. YAML was
+implemented first in `vcr` because that’s the default option in Ruby
+vcr.
+
+An R6 class `Serializer` is the parent class for all serializer types;
+`YAML`, `JSON`, and `QS2` are all R6 classes that inherit from
+`Serializer`. All `YAML`, `JSON`, and `QS2` define just two methods:
+[`serialize()`](https://rdrr.io/r/base/serialize.html) and
+`deserialize()` for converting R structures to yaml, json, or qs2, and
+converting yaml, json, or qs2 back to R structures, respectively.
+
+[^1]: The first version of Ruby’s vcr was released in February 2010
+    <https://rubygems.org/gems/vcr/versions/0.1.0>. Ruby vcr source
+    code: <https://github.com/vcr/vcr/>

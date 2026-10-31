@@ -1,0 +1,13 @@
+{
+  "commit": {
+    "commit": "06aaab5e146456207c07134e557cd4cd556ed9c2",
+    "author": "Scott Chamberlain <sckott@fastmail.com>",
+    "time": "2026-10-31T05:17:01Z",
+    "files": 4,
+    "merge": true,
+    "message": "Merge pull request #558 from ropensci/modern-httr2\n\nChanges for modern httr2"
+  },
+  "repo": "https://github.com/ropensci/vcr",
+  "pkg": "vcr",
+  "time": "2026-10-31T07:11:17Z"
+}
